@@ -3,6 +3,7 @@ use serde::Deserialize;
 use sqlx::sqlite::SqlitePoolOptions;
 use std::error::Error;
 use std::fs;
+use std::process::Stdio;
 
 #[derive(Debug, Deserialize)]
 struct Channel {
@@ -49,6 +50,8 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let _output = std::process::Command::new("sh")
             .arg("-c")
             .arg(&command)
+            .stderr(Stdio::inherit())
+            .stdout(Stdio::inherit())
             .output()?;
 
         // Get the current date and time
