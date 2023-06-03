@@ -20,6 +20,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         .connect("sqlite:sync_history.db")
         .await?;
 
+    // TODO use parallelism / concurrency to take advantage of multiple cores
     // Iterate through the channels
     for channel in channels {
         // Extract the channel ID from the URL
@@ -37,11 +38,11 @@ async fn main() -> Result<(), Box<dyn Error>> {
         // Build the yt-dlp command
         let command = if let Some(last_date) = last_synced_date {
             format!(
-                "yt-dlp {} --dateafter {} -o '%(title)s-%(id)s'",
+                "yt-dlp -f mp4 {} --dateafter {} -o '%(channel)s/%(title)s.mp4'",
                 channel.url, last_date
             )
         } else {
-            format!("yt-dlp {} -o '%(title)s-%(id)s'", channel.url)
+            format!("yt-dlp -f mp4 {} -o '%(channel)s/%(title)s.mp4'", channel.url)
         };
 
         // Execute the yt-dlp command
@@ -54,7 +55,7 @@ async fn main() -> Result<(), Box<dyn Error>> {
         let current_date: DateTime<Utc> = Utc::now();
 
         // Update the last synced date in the database
-        let current_date_rfc3339 = current_date.to_rfc3339();
+        let current_date_rfc3339 = current_date.format("%Y%m%d").to_string();
         sqlx::query!(
             r#"INSERT INTO sync_history (channel_id, last_synced_date) VALUES (?, ?)
                ON CONFLICT(channel_id) DO UPDATE SET last_synced_date = ?"#,
