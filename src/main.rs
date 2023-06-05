@@ -1,7 +1,9 @@
 use serde::Deserialize;
 use std::error::Error;
 use std::fs;
-use std::process::Stdio;
+
+use youtube_dl::YoutubeDl;
+use youtube_dl::YoutubeDlOutput::{Playlist, SingleVideo};
 
 #[derive(Debug, Deserialize)]
 struct Channel {
@@ -26,15 +28,32 @@ fn main() -> Result<(), Box<dyn Error>> {
             fs::write(&archive_file, "")?;
         }
 
-        let command = format!("yt-dlp -f mp4 {} -o 'channels/%(channel)s/%(title)s.mp4' --download-archive 'archives/{}/archive.txt'", channel.url, channel_id);
+        let yt = YoutubeDl::new(&channel.url).run()?;
+        match yt {
+            SingleVideo(video) => println!("Video: {}", video.title),
+            Playlist(playlist) => {
+                println!("Downloaded playlist: {:?}", playlist.title);
+                println!(
+                    "Videos in playlist: {:?}",
+                    playlist.entries.as_ref().map_or(0, |e| e.len())
+                );
+                if let Some(entries) = playlist.entries {
+                    for entry in entries {
+                        println!("Video: {}", entry.title);
+                    }
+                };
+            }
+        };
 
-        // Execute the yt-dlp command
-        let _output = std::process::Command::new("sh")
-            .arg("-c")
-            .arg(&command)
-            .stderr(Stdio::inherit())
-            .stdout(Stdio::inherit())
-            .output()?;
+        // let command = format!("yt-dlp -f mp4 {} -o 'channels/%(channel)s/%(title)s.mp4' --download-archive 'archives/{}/archive.txt'", channel.url, channel_id);
+
+        // // Execute the yt-dlp command
+        // let _output = std::process::Command::new("sh")
+        //     .arg("-c")
+        //     .arg(&command)
+        //     .stderr(Stdio::inherit())
+        //     .stdout(Stdio::inherit())
+        //     .output()?;
     }
 
     Ok(())
