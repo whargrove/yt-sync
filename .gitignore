@@ -2,3 +2,4 @@
 *.db
 archives/**
 channels/**
+.DS_Store
