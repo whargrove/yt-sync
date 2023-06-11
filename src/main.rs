@@ -1,8 +1,10 @@
+extern crate crossbeam;
+
+use crossbeam::channel::bounded;
 use serde::Deserialize;
 use std::error::Error;
 use std::fmt::Display;
 use std::fs;
-use tokio::sync::mpsc;
 
 use youtube_dl::YoutubeDlOutput::Playlist;
 use youtube_dl::{SingleVideo, YoutubeDl};
@@ -22,15 +24,16 @@ fn make_archive_file_path(channel_id: &str) -> String {
     format!("archives/{}/archive.txt", channel_id)
 }
 
-// #[tokio::main(flavor = "multi_thread", worker_threads = 8)]
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
     // Read the channel URLs from a JSON file
     let channel_file = fs::read_to_string("channels.json")?;
     let channels: Vec<Channel> = serde_json::from_str(&channel_file)?;
-    let (tx, mut rx) = mpsc::channel::<ChannelVideoMessage>(16);
+
+    let (tx, rx) = bounded::<ChannelVideoMessage>(16);
+
     for channel in channels {
-        let cvm_tx = tx.clone();
+        let tx = tx.clone();
         tokio::spawn(async move {
             let messages = get_videos_from_channel(&channel).await.unwrap();
             if !messages.is_empty() {
@@ -42,25 +45,24 @@ async fn main() -> Result<(), Box<dyn Error>> {
                 }
             }
             for m in messages {
-                cvm_tx.send(m).await.unwrap();
+                tx.send(m).unwrap();
             }
-            drop(cvm_tx);
+            drop(tx);
         });
     }
 
     drop(tx);
 
-    // todo create workers that will listen for message produced from each channel
-    // limit the number of workers to 8
-
-    let mut handles = vec![];
-    while let Some(cvm) = rx.recv().await {
-        let handle = tokio::spawn(async move {
-            download_video(cvm).await.unwrap();
+    let workers = num_cpus::get();
+    for _ in 0..workers {
+        let rx = rx.clone();
+        tokio::spawn(async move {
+            for m in rx.iter() {
+                // TODO Error handling
+                download_video(m).unwrap();
+            }
         });
-        handles.push(handle);
     }
-    futures::future::join_all(handles).await;
 
     Ok(())
 }
@@ -124,16 +126,16 @@ async fn get_videos_from_channel(
     Ok(videos)
 }
 
-async fn download_video(cvm: ChannelVideoMessage) -> Result<(), Box<dyn Error>> {
+fn download_video(cvm: ChannelVideoMessage) -> Result<(), Box<dyn Error>> {
     if let Some(video_url) = cvm.video.url {
         YoutubeDl::new(video_url)
             .format("mp4")
             .download(true)
+            // todo put the date of the video in the title
             .output_template("channels/%(channel)s/%(title)s.mp4")
             .extra_arg("--download-archive")
             .extra_arg(make_archive_file_path(cvm.channel_id.as_str()))
-            .run_async()
-            .await?;
+            .run()?;
     }
     Ok(())
 }
