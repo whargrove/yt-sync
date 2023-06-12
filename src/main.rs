@@ -171,7 +171,7 @@ async fn get_videos_from_channel(
 fn download_video(cvm: ChannelVideoMessage) -> Result<(), Box<dyn Error>> {
     if let Some(video_url) = cvm.video.url {
         info!("Downloading video {} from {}.", video_url, cvm.channel_id);
-        YoutubeDl::new(video_url)
+        return match YoutubeDl::new(video_url)
             .format("mp4")
             .download(true)
             // When viewing channels by directory in Plex the videos are sorted by file name.
@@ -180,9 +180,33 @@ fn download_video(cvm: ChannelVideoMessage) -> Result<(), Box<dyn Error>> {
             .output_template("channels/%(channel)s/%(upload_date>%Y-%m-%d)s - %(title)s.mp4")
             .extra_arg("--download-archive")
             .extra_arg(make_archive_file_path(cvm.channel_id.as_str()))
-            .run()?;
+            .run()
+        {
+            Ok(_) => {
+                debug!(
+                    "Successfully downloaded video {} from {}.",
+                    cvm.video.id, cvm.channel_id
+                );
+                Ok(())
+            }
+            Err(e) => {
+                return match e {
+                    youtube_dl::Error::Json(_) => {
+                        debug!(
+                            "Video {} from {} has already been downloaded.",
+                            cvm.video.id, cvm.channel_id
+                        );
+                        Ok(())
+                    }
+                    _ => Err(Box::new(e)),
+                }
+            }
+        };
     } else {
-        warn!("Video {} from {} has no URL! Unable to download.", cvm.video.id, cvm.channel_id);
+        warn!(
+            "Video {} from {} has no URL! Unable to download.",
+            cvm.video.id, cvm.channel_id
+        );
+        Ok(())
     }
-    Ok(())
 }
