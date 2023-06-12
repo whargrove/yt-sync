@@ -11,8 +11,8 @@ RUN curl -Ss -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp
     && chmod a+rx /usr/local/bin/yt-dlp
 COPY --from=builder /usr/src/app/target/release/yt-sync /usr/local/bin/yt-sync
 WORKDIR /app
-COPY ./channels.json /app/channels.json
 RUN mkdir /app/archives
 RUN mkdir /app/channels
-VOLUME [ "/app/archives", "/app/channels" ]
+RUN touch /app/channels.json
+VOLUME [ "/app/archives", "/app/channels", "/app/channels.json" ]
 CMD ["yt-sync"]

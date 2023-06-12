@@ -3,3 +3,4 @@
 archives/**
 channels/**
 .DS_Store
+channels.json
